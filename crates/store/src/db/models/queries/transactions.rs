@@ -375,10 +375,14 @@ fn with_output_note_proofs(
             // header and its commitment stay exactly as the transaction submitted them.
             let consumed_note_refs = input_notes
                 .iter()
-                .filter(|commitment| commitment.header().is_none())
                 .filter_map(|commitment| {
                     let nullifier = commitment.nullifier();
-                    note_ids_by_nullifier.get(&nullifier).map(|note_id| (nullifier, *note_id))
+                    let note_id = match commitment.header() {
+                        Some(header) if header.metadata().is_public() => Some(header.id()),
+                        Some(_) => None,
+                        None => note_ids_by_nullifier.get(&nullifier).copied(),
+                    };
+                    note_id.map(|note_id| (nullifier, note_id))
                 })
                 .collect();
 

@@ -3945,6 +3945,63 @@ fn select_transactions_records_resolves_consumed_public_note_refs() {
     assert_eq!(record.consumed_note_refs, vec![(nullifier, note_id)]);
 }
 
+/// Public inline headers supply note IDs even when the notes table has no matching row.
+#[test]
+fn select_transactions_records_resolves_public_inline_headers() {
+    let mut conn = create_db();
+    let block_num = BlockNumber::from(1);
+    create_block(&mut conn, block_num);
+    let bob = AccountId::try_from(ACCOUNT_ID_PRIVATE_SENDER).unwrap();
+    queries::upsert_accounts(
+        &mut conn,
+        &[mock_block_account_update(bob, 0)],
+        block_num,
+        &queries::PrecomputedPublicAccountStates::new(),
+    )
+    .unwrap();
+
+    let note = create_note(bob);
+    let header = |note_type| {
+        NoteHeader::new(
+            note.header().details_commitment(),
+            NoteMetadata::new(
+                PartialNoteMetadata::new(bob, note_type).with_tag(NoteTag::new(0x5c10_0000)),
+                &NoteAttachments::default(),
+            ),
+        )
+    };
+    let public_header = header(NoteType::Public);
+    let private_header = header(NoteType::Private);
+    let public_nullifier = num_to_nullifier(41);
+    let inputs = InputNotes::new_unchecked(vec![
+        InputNoteCommitment::from_parts_unchecked(public_nullifier, Some(public_header)),
+        InputNoteCommitment::from_parts_unchecked(num_to_nullifier(42), Some(private_header)),
+        InputNoteCommitment::from(num_to_nullifier(43)),
+    ]);
+    let base = mock_block_transaction(bob, 1);
+    let tx = TransactionHeader::new_unchecked(
+        base.id(),
+        bob,
+        base.initial_state_commitment(),
+        base.final_state_commitment(),
+        inputs,
+        vec![],
+    );
+    queries::insert_transactions(
+        &mut conn,
+        block_num,
+        &OrderedTransactionHeaders::new_unchecked(vec![tx.clone()]),
+    )
+    .unwrap();
+
+    let (_, records) =
+        queries::select_transactions_records(&mut conn, &[bob], BlockNumber::GENESIS..=block_num)
+            .unwrap();
+    let record = records.first().unwrap();
+    assert_eq!(record.consumed_note_refs, vec![(public_nullifier, public_header.id())]);
+    assert_eq!(record.header, tx);
+}
+
 /// Per-output-note contribution to a transaction's recorded `size_in_bytes`, mirroring
 /// `OUTPUT_NOTE_SYNC_RECORD_SIZE_BYTES` in the query module.
 const OUTPUT_NOTE_SIZE_BYTES: usize = 700;

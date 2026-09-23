@@ -685,9 +685,9 @@ message TransactionRecord {
     // `header.output_notes`. Any note present in the header but absent here was erased.
     repeated note.NoteInclusionInBlockProof output_note_proofs = 3;
 
-    // Maps a consumed input note's nullifier to its note ID, for the public notes the node can
-    // resolve. Authenticated inputs in `header.input_notes` carry only a nullifier, so this lets a
-    // follower recover the consumed note via `GetNotesById`. Private notes are absent.
+    // Maps each resolvable public input note's nullifier to its note ID.
+    // Includes authenticated and unauthenticated inputs. A follower can use
+    // GetNotesById without retaining input headers. Private notes are absent.
     repeated ConsumedNoteRef consumed_note_refs = 4;
 }
 
